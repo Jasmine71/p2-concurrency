@@ -8,6 +8,7 @@
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
+#include <stdbool.h>
 
 #define ONE_BILLION 1000000000L;
 
@@ -21,6 +22,7 @@ int c_and_sFlag = 0;
 
 pthread_mutex_t mutex;
 // todo: define a spinlock variable 
+int spinLock = 0;
 
 char const * getTestName() {
     if(mutexFlag)
@@ -57,17 +59,24 @@ void add_iterate(int val, int iterations) {
         }
         else if(spinLockFlag) {
             // todo: lock the spinlock
+            int expected = 0;
+            while(__atomic_compare_exchange_n(&spinLock,&expected,1,false, __ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST) == false){
+                expected = 0;
+            };
             add(&the_counter, val);
             // todo: unlock the spinlock
+            __atomic_store_n(&spinLock, 0, __ATOMIC_SEQ_CST);
         }
         else if(c_and_sFlag) {
             long long oldVal, newVal;
 			
-	    /* todo: change the following, so that it updates @the_counter atomically using CAS */
-	    oldVal = the_counter;
-	    newVal = oldVal + val;
-	    the_counter = newVal; 
-	    /* --- */
+            /* todo: change the following, so that it updates @the_counter atomically using CAS */
+            do{
+            oldVal = __atomic_load_n(&the_counter, __ATOMIC_RELAXED);
+            newVal = oldVal + val;
+            }
+            while( __atomic_compare_exchange_n(&the_counter, &oldVal, newVal,false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST) == false);
+            /* --- */
         }
         else
             add(&the_counter, val);
